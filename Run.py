@@ -3,9 +3,7 @@ import numpy as np
 import gymnasium
 import torch
 import matplotlib.pyplot as plt
-from REINFORCE import REINFORCE
-from AC import AC
-from A2C import A2C
+from SAC import SAC
 
 # The device to use for pytorch:
 # If cuda is not available it will be mega super slow 0_0 but will still work using the CPU.
@@ -74,40 +72,16 @@ def run():
 
         # Run 5 repetitions for each method
         for run in range(5):
-
-            # Intialize per specific method the agent
-            if method == "REINFORCE":
-                agent = REINFORCE(gamma=gamma,
-                    alpha=alpha,
-                    n_neurons=n_neurons,
-                    n_layers=n_layers,
-                    n_step = 500,
-                    env=gymnasium.make("CartPole-v1"),
-                    device=device
-                    )
-
-            elif method == "AC":
-                agent = AC(gamma=gamma,
-                    alpha=alpha,
-                    beta=beta,
-                    n_neurons=n_neurons,
-                    n_layers=n_layers,
-                    n_step=200,
-                    env=gymnasium.make("CartPole-v1"),
-                    device=device
-                    )
-
-            elif method == "A2C":
-                agent = A2C(gamma=gamma,
-                    alpha = alpha,
-                    beta = beta,
-                    n_neurons=n_neurons,
-                    n_layers=n_layers,
-                    n_step = 200,
-                    env=gymnasium.make("CartPole-v1"),
-                    device=device
-                    )
-            
+            agent = SAC(gamma=gamma,
+                alpha = alpha,
+                beta = beta,
+                udr=100,
+                n_neurons=n_neurons,
+                n_layers=n_layers,
+                n_step = 200,
+                env=gymnasium.make("CartPole-v1"),
+                device=device
+                )
             agent.train_loop()
 
             # Add the rewards for the current repetitions to the reward list

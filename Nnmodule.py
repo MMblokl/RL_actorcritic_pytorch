@@ -30,10 +30,10 @@ class Policy(nn.Module):
         return F.softmax(x, dim=0) # Softmax output to make the probabilities to 1
 
 
-class Critic(nn.Module):
+class Value(nn.Module):
     # Critic network
-    def __init__(self, n_obs: int, n_neurons: int, n_layers: int, device):
-        super(Critic, self).__init__()
+    def __init__(self, n_obs: int, n_act: int, n_neurons: int, n_layers: int, device):
+        super(Value, self).__init__()
         # Layer that takes the currect state, or current observation as input
         self.input = nn.Linear(n_obs, n_neurons)
         
@@ -45,7 +45,7 @@ class Critic(nn.Module):
         self.hidden = nn.Sequential(*self.hidden)
         
         # Output layer with a single output, which is the value estimate for the given state.
-        self.output = nn.Linear(n_neurons, 1)
+        self.output = nn.Linear(n_neurons, n_act)
 
         # Set the GPU to use for training if possible, otherwise just use the CPU
         self.to(device)

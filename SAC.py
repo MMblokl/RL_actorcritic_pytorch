@@ -1,4 +1,4 @@
-from Nnmodule import Policy, Critic
+from Nnmodule import Policy, Value
 import torch
 import torch.optim as optim
 import numpy as np
@@ -60,7 +60,7 @@ from Memory import Memory, transition
 
 
 class SAC:
-    def __init__(self, gamma, alpha, beta, udr, n_neurons, n_layers, n_step, env, device):
+    def __init__(self, gamma, alpha, beta, udr, reg_coef, n_neurons, n_layers, n_step, env, device):
         # Hyperparameter initialization for the class
         self.gamma = gamma
         self.alpha = alpha
@@ -68,6 +68,7 @@ class SAC:
         self.n_step = n_step
         self.beta = beta
         self.updaterate = udr
+        self.regularization_coef = reg_coef
         
         # The environment and device to store tensors are are initiated as class objects
         self.env = env
@@ -81,24 +82,24 @@ class SAC:
 
         # Init the Policy network and the Q-networks
         self.policy = Policy(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=device)
-        self.Q1 = Critic(n_obs=self.n_obs, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
-        self.Q2 = Critic(n_obs=self.n_obs, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
-        self.T1 = Critic(n_obs=self.n_obs, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
-        self.T2 = Critic(n_obs=self.n_obs, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
+        self.Q1 = Value(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
+        self.Q2 = Value(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
+        self.T1 = Value(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
+        self.T2 = Value(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
 
         # Set target net parameters as the Q-net parameters
         self.T1.load_state_dict(self.Q1.state_dict().copy())
-        self.T2.load_state_dict(self.Q1.state_dict().copy())
+        self.T2.load_state_dict(self.Q2.state_dict().copy())
 
         # Optimizer and loss to use
-        self.pol_optim = optim.Adam(self.policynet.parameters(), lr=alpha, amsgrad=True)
+        self.pol_optim = optim.Adam(self.policy.parameters(), lr=alpha, amsgrad=True)
         self.Q1_optim = optim.Adam(self.Q1.parameters(), lr=self.beta, amsgrad=True)
         self.Q2_optim = optim.Adam(self.Q2.parameters(), lr=self.beta, amsgrad=True)
         self.T1_optim = optim.Adam(self.T1.parameters(), lr=self.beta, amsgrad=True)
         self.T2_optim = optim.Adam(self.T2.parameters(), lr=self.beta, amsgrad=True)
 
         # Replay buffer
-        self.mem = Memory(5e4)
+        self.mem = Memory(10000)
 
         # Running_reward values for measuring the convergence to the optimum using a threshold to stop training
         self.running_rews = []
@@ -115,26 +116,32 @@ class SAC:
         action = dist.sample()
             
         # Save logarithm of the probabilities
-        #log_p = dist.log_prob(action)
+        log_p = dist.log_prob(action)
         action = action.item()
 
         return action
 
 
     def target_sample(self, observations):
-        # Get the probabilaty dists
-        probs = self.policy(observations)
-        dists = [Categorical(p) for p in probs]
+        with torch.no_grad():
+            # Get the probabilaty dists
+            probs = self.policy(observations)
+            dists = [Categorical(p) for p in probs]
 
-        # Get actions
-        actions = [dist.sample() for dist in dists]
-        
-        # Get log values for target computation
-        log_probs = [dist.log_prob(action) for dist, action in zip(dists, actions)]
+            # Get actions
+            actions = [dist.sample() for dist in dists]
+            
+            # Get log values for target computation
+            log_probs = [dist.log_prob(action) for dist, action in zip(dists, actions)]
 
-        # Set the log_probs and actions to tensors
-        actions = torch.tensor(np.array(actions), device=self.device)
-        log_probs = torch.cat(log_probs)
+            # Set the log_probs and actions to tensors
+            actions = torch.tensor([np.int64(i) for i in actions])
+            log_probs = torch.tensor([np.float64(i) for i in log_probs])
+
+            return actions, log_probs
+    
+    def reparam_sample(self, observations)
+        probs = 
 
 
     def train(self):
@@ -152,41 +159,39 @@ class SAC:
         # Sample NEW actions using the states for the target functions
         t_act, t_probs = self.target_sample(states)
 
+        # Compute target values
+        with torch.no_grad():
+            t1_vals = self.T1(next_states).gather(1, t_act.view(-1,1)).view(1,-1)[0]
+            t2_vals = self.T2(next_states).gather(1, t_act.view(-1,1)).view(1,-1)[0]
+
+        # Target value
+        y = rewards + self.gamma*(1-dones)*(torch.min(t1_vals, t2_vals) - self.regularization_coef * t_probs)
+
+        # Get Q-vals for both Q nets
+        q1_vals = self.Q1(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
+        q2_vals = self.Q2(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
+
+        # Loss for the policy network
+
+        # SOMETHING REPARAMETRIZATION TRICK????????
+
+
+        # MSEloss between the target y and the output q values
+        q1_loss = torch.nn.functional.mse_loss(q1_vals, y)
+        q2_loss = torch.nn.functional.mse_loss(q2_vals, y)
         breakpoint()
 
-        # Compute target values
-        y = rewards + self.gamma*(1-dones)*(min(self.T1))
-
-
-
-        # Normalize the q-values to avoid unstable learning, and also avoid exponential weight increase.
-        q_values = (q_values - q_values.mean()) / (q_values.std() + np.finfo(np.float32).eps.item())
-
-        # Advantage: Q(st, at) - V(st)
-        advantage = q_values - critic_vals
-
-        # Use the log probabily and the return value to calculate the loss.
-        # Detach the tensor to not let the critic and policy network gradients mix
-        policy_loss = -(log_probs * advantage.detach()).sum()
-        
-        # Critic loss, the mean squared error of the critic values and the q-values, aka advantage.
-        critic_loss = torch.nn.functional.mse_loss(critic_vals, q_values)
-        
-        # Reset old gradient
-        self.pol_optim.zero_grad()
-        self.cri_optim.zero_grad()
+        # Reset old grads
+        self.Q1_optim.zero_grad()
+        self.Q2_optim.zero_grad()
 
         # Backpropagate the loss
-        policy_loss.backward()
-        critic_loss.backward()
-
-        # Clip the gradient of the policy and critic net for even more stable training
-        torch.nn.utils.clip_grad_norm_(self.policynet.parameters(), max_norm=1.0)
-        torch.nn.utils.clip_grad_norm_(self.criticnet.parameters(), max_norm=1.0)
+        q1_loss.backward()
+        q2_loss.backward()
 
         # Optimizer step
-        self.pol_optim.step()
-        self.cri_optim.step()
+        self.Q1_optim.step()
+        self.Q2_optim.step()
 
 
     def train_loop(self):
@@ -225,7 +230,7 @@ class SAC:
             # Continue running reward and stop training if it passed threshold
             # This value is a measure of how long the rewards of the network have stayed consistent until it reaches a threshold.
             # Taken from the example REINFORCE algorithm in the PyTorch github.
-            running_rew = 0.10 * np.sum(rewards) + (1 - 0.10) * running_rew
+            #running_rew = 0.10 * np.sum(rewards) + (1 - 0.10) * running_rew
             
             # Save the current running reward for the learning curve.
             self.running_rews.append(running_rew)
