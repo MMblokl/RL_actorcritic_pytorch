@@ -60,9 +60,14 @@ def run():
     # Hyperparameters
     gamma = 0.99 # Future reward discount factor
     alpha = 1e-4 # Learning rate for the policy network
-    beta = 1e-3 # Learning rate for critic network
+    beta = 1e-4 # Learning rate for Q-networks
+    tau = 0.995 # Update rate for the target networks
+    batchsize = 100 # How many transitions are sampled from the buffer
+    update_every = 1000
+    memsize = 100000 # Max size of replay buffer
     n_neurons = 256 # Number of neurons in the critic and policy network in all hidden layers.
     n_layers = 2  # Number of hidden layers in the hidden layer block of the policy and critic network.
+    reg_coef = 0.2
 
     # Run 5 repetitions
     for method in methods:
@@ -75,7 +80,11 @@ def run():
             agent = SAC(gamma=gamma,
                 alpha = alpha,
                 beta = beta,
-                udr=100,
+                tau=tau,
+                batchsize=batchsize,
+                update_every = update_every,
+                memsize=memsize,
+                reg_coef = reg_coef,
                 n_neurons=n_neurons,
                 n_layers=n_layers,
                 n_step = 200,

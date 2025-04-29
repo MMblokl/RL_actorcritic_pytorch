@@ -27,7 +27,7 @@ class Policy(nn.Module):
         x = self.input(x) # Input layer
         x = self.hidden(x)
         x = self.output(x) # Ouput layer
-        return F.softmax(x, dim=0) # Softmax output to make the probabilities to 1
+        return F.softmax(x) # Softmax output to make the probabilities to 1
 
 
 class Value(nn.Module):

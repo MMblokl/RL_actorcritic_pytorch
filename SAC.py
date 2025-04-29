@@ -2,8 +2,9 @@ from Nnmodule import Policy, Value
 import torch
 import torch.optim as optim
 import numpy as np
-from torch.distributions import Categorical
+from torch.distributions import Categorical, Normal
 from Memory import Memory, transition
+import gymnasium
 
 
 # VERY good source:
@@ -60,14 +61,17 @@ from Memory import Memory, transition
 
 
 class SAC:
-    def __init__(self, gamma, alpha, beta, udr, reg_coef, n_neurons, n_layers, n_step, env, device):
+    def __init__(self, gamma, alpha, beta, tau, batchsize, memsize, update_every, reg_coef, n_neurons, n_layers, n_step, env, device):
         # Hyperparameter initialization for the class
         self.gamma = gamma
         self.alpha = alpha
         self.n_neurons = n_neurons
         self.n_step = n_step
-        self.beta = beta
-        self.updaterate = udr
+        #self.beta = beta
+        self.tau = tau
+        self.memsize = memsize
+        self.batchsize = batchsize
+        self.update_every = update_every
         self.regularization_coef = reg_coef
         
         # The environment and device to store tensors are are initiated as class objects
@@ -93,16 +97,14 @@ class SAC:
 
         # Optimizer and loss to use
         self.pol_optim = optim.Adam(self.policy.parameters(), lr=alpha, amsgrad=True)
-        self.Q1_optim = optim.Adam(self.Q1.parameters(), lr=self.beta, amsgrad=True)
-        self.Q2_optim = optim.Adam(self.Q2.parameters(), lr=self.beta, amsgrad=True)
-        self.T1_optim = optim.Adam(self.T1.parameters(), lr=self.beta, amsgrad=True)
-        self.T2_optim = optim.Adam(self.T2.parameters(), lr=self.beta, amsgrad=True)
+        self.Q1_optim = optim.Adam(self.Q1.parameters(), lr=alpha, amsgrad=True)
+        self.Q2_optim = optim.Adam(self.Q2.parameters(), lr=alpha, amsgrad=True)
 
         # Replay buffer
-        self.mem = Memory(10000)
+        self.mem = Memory(memsize)
 
         # Running_reward values for measuring the convergence to the optimum using a threshold to stop training
-        self.running_rews = []
+        self.ep_rewards = []
 
 
     def sample_action(self, observation):
@@ -116,37 +118,64 @@ class SAC:
         action = dist.sample()
             
         # Save logarithm of the probabilities
-        log_p = dist.log_prob(action)
+        #log_p = dist.log_prob(action)
         action = action.item()
 
         return action
 
 
-    def target_sample(self, observations):
-        with torch.no_grad():
-            # Get the probabilaty dists
-            probs = self.policy(observations)
-            dists = [Categorical(p) for p in probs]
+    def sample_actions(self, observations):
+        # Get the probabilaty dists
+        probs = self.policy(observations)
+        dists = Categorical(probs)
+        
+        # Get actions
+        actions = dists.sample()
+        log_probs = dists.log_prob(actions)
 
-            # Get actions
-            actions = [dist.sample() for dist in dists]
-            
-            # Get log values for target computation
-            log_probs = [dist.log_prob(action) for dist, action in zip(dists, actions)]
+        return actions, log_probs
 
-            # Set the log_probs and actions to tensors
-            actions = torch.tensor([np.int64(i) for i in actions])
-            log_probs = torch.tensor([np.float64(i) for i in log_probs])
 
-            return actions, log_probs
+    def reparam_sample(self, observations):
+        probs = self.policy(observations)
+
+        # Get the means and stds for the normal dists
+        means = torch.mean(probs, dim=1)
+        stds = torch.std(probs, dim=1)
+
+        # Get normal dists from these values
+        dists = Normal(means, stds)
+
+        # Get the action and log_prob value
+        actions = dists.rsample()
+        log_probs = dists.log_prob(actions)
+
+        breakpoint()
+
+        # Set actions and log_probs to single tensor
+        actions = torch.tensor([np.int64(i) for i in actions], device=self.device)
+        log_probs = torch.tensor([np.float64(i) for i in log_probs], device=self.device)
+        breakpoint()
     
-    def reparam_sample(self, observations)
-        probs = 
+
+    def update_target(self):
+        # Soft update the target networks
+        q1_state = self.Q1.state_dict()
+        q2_state = self.Q2.state_dict()
+        t1_state = self.T1.state_dict()
+        t2_state = self.T2.state_dict()
+
+        for key in q1_state:
+            t1_state[key] = t1_state[key]*self.tau + t1_state[key]*(1-self.tau)
+        self.T1.load_state_dict(t1_state)
+        for key in q2_state:
+            t2_state[key] = t2_state[key]*self.tau + t2_state[key]*(1-self.tau)
+        self.T2.load_state_dict(t2_state)
 
 
     def train(self):
-        # Sample batch from replaymem
-        batch = self.mem.sample(self.updaterate)
+        # Sample batch from replaymemory
+        batch = self.mem.sample(self.batchsize)
         batch = transition(*zip(*batch))
         
         # Get the values into tensors for math
@@ -157,7 +186,8 @@ class SAC:
         dones = torch.tensor(batch.done, dtype=torch.float, device=self.device)
         
         # Sample NEW actions using the states for the target functions
-        t_act, t_probs = self.target_sample(states)
+        with torch.no_grad():
+            t_act, t_probs = self.sample_actions(next_states)
 
         # Compute target values
         with torch.no_grad():
@@ -172,39 +202,64 @@ class SAC:
         q2_vals = self.Q2(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
 
         # Loss for the policy network
-
-        # SOMETHING REPARAMETRIZATION TRICK????????
-
+        s_actions, log_probs = self.sample_actions(states)
+        pol_loss = torch.sum(torch.min(self.Q1(states).gather(1, s_actions.view(-1,1)).view(1,-1)[0], self.Q2(states).gather(1, s_actions.view(-1,1)).view(1,-1)[0]) - self.regularization_coef * log_probs)
 
         # MSEloss between the target y and the output q values
         q1_loss = torch.nn.functional.mse_loss(q1_vals, y)
         q2_loss = torch.nn.functional.mse_loss(q2_vals, y)
-        breakpoint()
 
         # Reset old grads
         self.Q1_optim.zero_grad()
         self.Q2_optim.zero_grad()
+        self.policy.zero_grad()
 
         # Backpropagate the loss
+        pol_loss.backward()
         q1_loss.backward()
         q2_loss.backward()
 
         # Optimizer step
+        self.pol_optim.step()
         self.Q1_optim.step()
         self.Q2_optim.step()
+
+        # Update target networks
+        self.update_target()
+
+
+    def test_net(self):
+        # Do a single episode to gauge how well the network is currently trained.
+        # Just an episode without training.
+        rewards = []
+        localenv = gymnasium.make("CartPole-v1")
+        done, truncated = False, False
+        obs, _ = localenv.reset()
+        while not (done or truncated):
+            # Test the episode using the argmax of the policy probabilities.
+            state = torch.tensor(obs, device=self.device)
+            # No gradient needed
+            with torch.no_grad():
+                action = np.argmax(self.policy(state).cpu().numpy())
+
+            next_obs, reward, done, truncated, _ = localenv.step(action)
+            obs = next_obs
+            # Take the current reward to save
+            rewards.append(reward)
+        # Update the average summed reward plot
+        self.ep_rewards.append(np.sum(rewards))
+        localenv.close()
 
 
     def train_loop(self):
         # A loop for training the agent given a number of steps and a rate of testing the weights for plotting
         steps = 0
         running_rew = 10
-        while True:            
+        while True:
             # Get the first observation, or state by resetting the environment
             done, truncated = False, False
             obs, _ = self.env.reset()
-
             while not (done or truncated):
-
                 # Sample action from the policy
                 action = self.sample_action(observation=obs)
                 
@@ -219,24 +274,11 @@ class SAC:
                 steps += 1
 
                 # Train the networks
-                if steps % self.updaterate == 0:
+                if steps % self.update_every == 0:
                     self.train()
+                    self.steps = 0
+                    self.test_net()
+                    print(self.ep_rewards)
 
             # Close the environment as the agent is done for this current episode
             self.env.close()
-
-            
-
-            # Continue running reward and stop training if it passed threshold
-            # This value is a measure of how long the rewards of the network have stayed consistent until it reaches a threshold.
-            # Taken from the example REINFORCE algorithm in the PyTorch github.
-            #running_rew = 0.10 * np.sum(rewards) + (1 - 0.10) * running_rew
-            
-            # Save the current running reward for the learning curve.
-            self.running_rews.append(running_rew)
-            
-            # Does the running smoothed reward reach the threshold? stop the training.
-            # 10000 episode limit in case the network is REALLY unlucky to prevent an infinite loop.
-            if (running_rew >= self.env.spec.reward_threshold) or (len(self.running_rews) >= 10000):
-                break
-        print(f"Training done! Reached a running reward value of {running_rew}, in {len(self.running_rews)} episodes")
