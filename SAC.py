@@ -118,18 +118,6 @@ class SAC:
         return action
 
 
-    def sample_actions(self, observations):
-        # Get the probabilaty dists
-        probs = self.policy(observations)
-        dists = Categorical(probs)
-        
-        # Get actions
-        actions = dists.sample()
-        log_probs = dists.log_prob(actions)
-
-        return actions, log_probs
-
-
     def update_target(self):
         # Soft update the target networks
         q1_state = self.Q1.state_dict().copy()
@@ -215,29 +203,6 @@ class SAC:
 
         # Update target networks using soft update
         self.update_target()
-
-
-    def test_net(self):
-        # Do a single episode to gauge how well the network is currently trained.
-        # Just an episode without training.
-        rewards = []
-        localenv = gymnasium.make("CartPole-v1")
-        done, truncated = False, False
-        obs, _ = localenv.reset()
-        while not (done or truncated):
-            # Test the episode using the argmax of the policy probabilities.
-            state = torch.tensor(obs, device=self.device)
-            # No gradient needed
-            with torch.no_grad():
-                action = np.argmax(self.policy(state).cpu().numpy())
-
-            next_obs, reward, done, truncated, _ = localenv.step(action)
-            obs = next_obs
-            # Take the current reward to save
-            rewards.append(reward)
-        # Update the average summed reward plot
-        self.ep_rewards.append(np.sum(rewards))
-        localenv.close()
 
 
     def train_loop(self):
