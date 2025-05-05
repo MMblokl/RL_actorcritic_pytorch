@@ -113,7 +113,7 @@ class SAC:
         probabilities, _ = self.policy(state)
 
         # Action is sampled from the probabilaties
-        action = np.random.choice(self.n_act, p=probabilities.numpy())
+        action = np.random.choice(self.n_act, p=probabilities.cpu().numpy())
 
         return action
 
@@ -241,7 +241,7 @@ class SAC:
             running_rew = 0.10 * np.sum(rewards) + (1 - 0.10) * running_rew
             self.running_rews.append(running_rew)
 
-            print(running_rew)
+            print(running_rew, np.sum(rewards))
 
             # Close the environment as the agent is done for this current episode
             self.env.close()
