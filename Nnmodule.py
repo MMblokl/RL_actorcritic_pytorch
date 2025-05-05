@@ -30,10 +30,10 @@ class Policy(nn.Module):
         return F.softmax(x) # Softmax output to make the probabilities to 1
 
 
-class Value(nn.Module):
+class Critic(nn.Module):
     # Critic network
     def __init__(self, n_obs: int, n_act: int, n_neurons: int, n_layers: int, device):
-        super(Value, self).__init__()
+        super(Critic, self).__init__()
         # Layer that takes the currect state, or current observation as input
         self.input = nn.Linear(n_obs, n_neurons)
         

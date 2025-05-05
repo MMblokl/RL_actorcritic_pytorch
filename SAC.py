@@ -1,4 +1,4 @@
-from Nnmodule import Policy, Value
+from Nnmodule import Policy, Critic
 import torch
 import torch.optim as optim
 import numpy as np
@@ -85,10 +85,10 @@ class SAC:
 
         # Init the Policy network and the Q-networks
         self.policy = Policy(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=device)
-        self.Q1 = Value(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
-        self.Q2 = Value(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
-        self.T1 = Value(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
-        self.T2 = Value(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
+        self.Q1 = Critic(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
+        self.Q2 = Critic(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
+        self.T1 = Critic(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
+        self.T2 = Critic(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device)
 
         # Set target net parameters as the Q-net parameters
         self.T1.load_state_dict(self.Q1.state_dict().copy())
@@ -162,19 +162,19 @@ class SAC:
         rewards = torch.tensor(batch.reward, device=self.device)
         dones = torch.tensor(batch.done, dtype=torch.float, device=self.device)
         
-        # Sample NEW actions using the next states for the target values
+        
         with torch.no_grad():
+            # Sample NEW actions using the next states for the target values
             next_act, next_log_probs = self.sample_actions(next_states)
 
-        # Compute target values
-        with torch.no_grad():
+            # Compute target values
             t1_vals = self.T1(next_states).gather(1, next_act.view(-1,1)).view(1,-1)[0]
             t2_vals = self.T2(next_states).gather(1, next_act.view(-1,1)).view(1,-1)[0]
 
-        # Target value
-        # H is estimated using the log_probs value
-        y = rewards + self.gamma*(1-dones)*(torch.min(t1_vals, t2_vals) - self.regularization_coef * next_log_probs)
-        
+            # Target value
+            # H is estimated using the log_probs value
+            y = rewards + self.gamma*(1-dones)*(torch.min(t1_vals, t2_vals) - self.regularization_coef * next_log_probs)
+
         # Get Q-vals for both Q nets
         q1_vals = self.Q1(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
         q2_vals = self.Q2(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
@@ -190,7 +190,7 @@ class SAC:
                 min_q_vals = torch.min(pol_q1, pol_q2)
 
             # Calculate the policy loss
-            pol_loss = 1/self.batchsize * torch.sum(min_q_vals - self.regularization_coef * log_probs)
+            pol_loss = torch.sum(min_q_vals - self.regularization_coef * log_probs).mean()
         
             # Clear old gradient
             self.pol_optim.zero_grad()
@@ -215,7 +215,7 @@ class SAC:
         self.Q1_optim.step()
         self.Q2_optim.step()
 
-        # Update target networks
+        # Update target networks using soft update
         self.update_target()
 
 

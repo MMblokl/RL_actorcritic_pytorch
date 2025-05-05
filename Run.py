@@ -53,21 +53,20 @@ def plot_curve(method_dict, stdrange: int, ):
 
 def run():
     # Initialize the methods used and the reward dict that will contain the rewards for all methods over 5 repetitions
-    #methods = ["REINFORCE", "AC", "A2C"]
-    methods = ["A2C"]
+    methods = ["SAC"]
     reward_dict = {}
 
     # Hyperparameters
     gamma = 0.99 # Future reward discount factor
-    alpha = 0.0005 # Learning rate for the networks
-    tau = 0.998 # Update rate for the target networks
-    batchsize = 100 # How many transitions are sampled from the buffer for calculating loss
-    update_every = 50 # How many Q-net/Critic-net updates per policy update
+    alpha = 0.0005 # Learning rate for all networks
+    tau = 0.995 # Update rate for the target networks
+    batchsize = 128 # How many transitions are sampled from the buffer for calculating loss
+    update_every = 2 # How many Q-net/Critic-net updates per policy update
     init_sample = 1000 # Initial sample of env steps before the real train loop starts.
     memsize = 1000000 # Max size of replay buffer
     n_neurons = 256 # Number of neurons in the critic and policy network in all hidden layers.
     n_layers = 2  # Number of hidden layers in the hidden layer block of the policy and critic network.
-    reg_coef = 0.25 # Entropy regularization coefficient
+    reg_coef = 0.1 # Entropy regularization coefficient
 
     # Run 5 repetitions
     for method in methods:
