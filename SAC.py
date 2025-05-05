@@ -110,15 +110,10 @@ class SAC:
         # Set the state as a tensor
         state = torch.tensor(observation, dtype=torch.float, device=self.device) #Turn env state into a tensor
         # Get the action for the current state according to the policy.
-        probabilities = self.policy(state)
+        probabilities, _ = self.policy(state)
 
-        # Create a distribution and sample an action
-        dist = Categorical(probabilities)
-        action = dist.sample()
-            
-        # Save logarithm of the probabilities
-        #log_p = dist.log_prob(action)
-        action = action.item()
+        # Action is sampled from the probabilaties
+        action = np.random.choice(self.n_act, p=probabilities.numpy())
 
         return action
 
@@ -162,35 +157,42 @@ class SAC:
         rewards = torch.tensor(batch.reward, device=self.device)
         dones = torch.tensor(batch.done, dtype=torch.float, device=self.device)
         
-        
         with torch.no_grad():
             # Sample NEW actions using the next states for the target values
-            next_act, next_log_probs = self.sample_actions(next_states)
+            next_action_probs, next_log_probs = self.policy(states)
+
 
             # Compute target values
-            t1_vals = self.T1(next_states).gather(1, next_act.view(-1,1)).view(1,-1)[0]
-            t2_vals = self.T2(next_states).gather(1, next_act.view(-1,1)).view(1,-1)[0]
+            t1_vals = self.T1(next_states)
+            t2_vals = self.T2(next_states)
+            min_t_vals = torch.min(t1_vals, t2_vals)
+
+            # Next V-value
+            # H is estimated using the log_probs value
+            next_v = (next_action_probs * (min_t_vals - (self.alpha * next_log_probs))).sum(dim=1)
 
             # Target value
-            # H is estimated using the log_probs value
-            y = rewards + self.gamma*(1-dones)*(torch.min(t1_vals, t2_vals) - self.regularization_coef * next_log_probs)
+            y = rewards + (1-dones) * self.gamma * next_v
 
         # Get Q-vals for both Q nets
         q1_vals = self.Q1(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
         q2_vals = self.Q2(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
 
+        # MSEloss between the target y and the output q values
+        q1_loss = torch.nn.functional.mse_loss(q1_vals, y)
+        q2_loss = torch.nn.functional.mse_loss(q2_vals, y)
 
         # Is it time to update the policy?
         if self.steps % self.update_every == 0:
             # Loss for the policy network
-            s_actions, log_probs = self.sample_actions(states)
+            act_probs, log_probs = self.policy(states)
             with torch.no_grad():
-                pol_q1 = self.Q1(states).gather(1, s_actions.view(-1,1)).view(1,-1)[0]
-                pol_q2 = self.Q2(states).gather(1, s_actions.view(-1,1)).view(1,-1)[0]
-                min_q_vals = torch.min(pol_q1, pol_q2)
+                q1 = self.Q1(states)
+                q2 = self.Q2(states)
+                min_q_vals = torch.min(q1, q2)
 
             # Calculate the policy loss
-            pol_loss = torch.sum(min_q_vals - self.regularization_coef * log_probs).mean()
+            pol_loss = (act_probs * (self.alpha * log_probs - min_q_vals)).sum(dim=1).mean()
         
             # Clear old gradient
             self.pol_optim.zero_grad()
@@ -198,10 +200,6 @@ class SAC:
             pol_loss.backward()
             # Update network
             self.pol_optim.step()
-        
-        # MSEloss between the target y and the output q values
-        q1_loss = torch.nn.functional.mse_loss(q1_vals, y)
-        q2_loss = torch.nn.functional.mse_loss(q2_vals, y)
 
         # Reset old grads
         self.Q1_optim.zero_grad()
@@ -256,7 +254,7 @@ class SAC:
                 # Sample action from the policy
                 with torch.no_grad():
                     action = self.sample_action(observation=obs)
-
+                
                 # Recieve feedback from the environment using the chosen action
                 next_obs, reward, done, truncated, _ = self.env.step(action)
                 
@@ -278,7 +276,7 @@ class SAC:
             running_rew = 0.10 * np.sum(rewards) + (1 - 0.10) * running_rew
             self.running_rews.append(running_rew)
 
-            print(running_rew, np.sum(rewards))
+            print(running_rew)
 
             # Close the environment as the agent is done for this current episode
             self.env.close()
