@@ -59,15 +59,15 @@ def run():
 
     # Hyperparameters
     gamma = 0.99 # Future reward discount factor
-    alpha = 0.0001 # Learning rate for the networks
-    tau = 0.995 # Update rate for the target networks
-    batchsize = 200 # How many transitions are sampled from the buffer for calculating loss
-    update_every = 100 # How many new env steps to sample before updating the network
+    alpha = 0.0005 # Learning rate for the networks
+    tau = 0.998 # Update rate for the target networks
+    batchsize = 100 # How many transitions are sampled from the buffer for calculating loss
+    update_every = 50 # How many Q-net/Critic-net updates per policy update
     init_sample = 1000 # Initial sample of env steps before the real train loop starts.
     memsize = 1000000 # Max size of replay buffer
     n_neurons = 256 # Number of neurons in the critic and policy network in all hidden layers.
     n_layers = 2  # Number of hidden layers in the hidden layer block of the policy and critic network.
-    reg_coef = 0.1 # Entropy regularization coefficient
+    reg_coef = 0.25 # Entropy regularization coefficient
 
     # Run 5 repetitions
     for method in methods:
@@ -87,7 +87,6 @@ def run():
                 reg_coef = reg_coef,
                 n_neurons=n_neurons,
                 n_layers=n_layers,
-                n_step = 200,
                 env=gymnasium.make("CartPole-v1"),
                 device=device
                 )

@@ -61,12 +61,11 @@ import gymnasium
 
 
 class SAC:
-    def __init__(self, gamma, alpha, tau, batchsize, memsize, update_every, init_sample, reg_coef, n_neurons, n_layers, n_step, env, device):
+    def __init__(self, gamma, alpha, tau, batchsize, memsize, update_every, init_sample, reg_coef, n_neurons, n_layers, env, device):
         # Hyperparameter initialization for the class
         self.gamma = gamma
         self.alpha = alpha
         self.n_neurons = n_neurons
-        self.n_step = n_step
         self.tau = tau
         self.memsize = memsize
         self.batchsize = batchsize
@@ -138,16 +137,16 @@ class SAC:
 
     def update_target(self):
         # Soft update the target networks
-        q1_state = self.Q1.state_dict()
-        q2_state = self.Q2.state_dict()
-        t1_state = self.T1.state_dict()
-        t2_state = self.T2.state_dict()
+        q1_state = self.Q1.state_dict().copy()
+        q2_state = self.Q2.state_dict().copy()
+        t1_state = self.T1.state_dict().copy()
+        t2_state = self.T2.state_dict().copy()
 
         for key in q1_state:
-            t1_state[key] = q1_state[key]*self.tau + t1_state[key]*(1-self.tau)
+            t1_state[key] = t1_state[key]*self.tau + q1_state[key]*(1-self.tau)
         self.T1.load_state_dict(t1_state)
         for key in q2_state:
-            t2_state[key] = q2_state[key]*self.tau + t2_state[key]*(1-self.tau)
+            t2_state[key] = t2_state[key]*self.tau + q2_state[key]*(1-self.tau)
         self.T2.load_state_dict(t2_state)
 
 
@@ -189,6 +188,8 @@ class SAC:
                 pol_q1 = self.Q1(states).gather(1, s_actions.view(-1,1)).view(1,-1)[0]
                 pol_q2 = self.Q2(states).gather(1, s_actions.view(-1,1)).view(1,-1)[0]
                 min_q_vals = torch.min(pol_q1, pol_q2)
+
+            # Calculate the policy loss
             pol_loss = 1/self.batchsize * torch.sum(min_q_vals - self.regularization_coef * log_probs)
         
             # Clear old gradient
