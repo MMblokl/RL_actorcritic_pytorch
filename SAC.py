@@ -104,7 +104,7 @@ class SAC:
         self.mem = Memory(memsize)
 
         # Running_reward values for measuring the convergence to the optimum using a threshold to stop training
-        self.ep_rewards = []
+        self.running_rews = []
 
 
     def sample_action(self, observation):
@@ -144,10 +144,10 @@ class SAC:
         t2_state = self.T2.state_dict()
 
         for key in q1_state:
-            t1_state[key] = t1_state[key]*self.tau + t1_state[key]*(1-self.tau)
+            t1_state[key] = q1_state[key]*self.tau + t1_state[key]*(1-self.tau)
         self.T1.load_state_dict(t1_state)
         for key in q2_state:
-            t2_state[key] = t2_state[key]*self.tau + t2_state[key]*(1-self.tau)
+            t2_state[key] = q2_state[key]*self.tau + t2_state[key]*(1-self.tau)
         self.T2.load_state_dict(t2_state)
 
 
@@ -163,27 +163,40 @@ class SAC:
         rewards = torch.tensor(batch.reward, device=self.device)
         dones = torch.tensor(batch.done, dtype=torch.float, device=self.device)
         
-        # Sample NEW actions using the states for the target functions
+        # Sample NEW actions using the next states for the target values
         with torch.no_grad():
-            t_act, t_probs = self.sample_actions(next_states)
+            next_act, next_log_probs = self.sample_actions(next_states)
 
         # Compute target values
         with torch.no_grad():
-            t1_vals = self.T1(next_states).gather(1, t_act.view(-1,1)).view(1,-1)[0]
-            t2_vals = self.T2(next_states).gather(1, t_act.view(-1,1)).view(1,-1)[0]
+            t1_vals = self.T1(next_states).gather(1, next_act.view(-1,1)).view(1,-1)[0]
+            t2_vals = self.T2(next_states).gather(1, next_act.view(-1,1)).view(1,-1)[0]
 
         # Target value
-        y = rewards + self.gamma*(1-dones)*(torch.min(t1_vals, t2_vals) - self.regularization_coef * t_probs)
+        # H is estimated using the log_probs value
+        y = rewards + self.gamma*(1-dones)*(torch.min(t1_vals, t2_vals) - self.regularization_coef * next_log_probs)
         
         # Get Q-vals for both Q nets
         q1_vals = self.Q1(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
         q2_vals = self.Q2(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
 
-        # Loss for the policy network
-        s_actions, log_probs = self.sample_actions(states)
-        with torch.no_grad():
-            min_q_vals = torch.min(self.Q1(states).gather(1, s_actions.view(-1,1)).view(1,-1)[0], self.Q2(states).gather(1, s_actions.view(-1,1)).view(1,-1)[0])
-        pol_loss = 1/self.batchsize * torch.sum(min_q_vals - self.regularization_coef * log_probs)
+
+        # Is it time to update the policy?
+        if self.steps % self.update_every == 0:
+            # Loss for the policy network
+            s_actions, log_probs = self.sample_actions(states)
+            with torch.no_grad():
+                pol_q1 = self.Q1(states).gather(1, s_actions.view(-1,1)).view(1,-1)[0]
+                pol_q2 = self.Q2(states).gather(1, s_actions.view(-1,1)).view(1,-1)[0]
+                min_q_vals = torch.min(pol_q1, pol_q2)
+            pol_loss = 1/self.batchsize * torch.sum(min_q_vals - self.regularization_coef * log_probs)
+        
+            # Clear old gradient
+            self.pol_optim.zero_grad()
+            # Backprop loss
+            pol_loss.backward()
+            # Update network
+            self.pol_optim.step()
         
         # MSEloss between the target y and the output q values
         q1_loss = torch.nn.functional.mse_loss(q1_vals, y)
@@ -192,15 +205,12 @@ class SAC:
         # Reset old grads
         self.Q1_optim.zero_grad()
         self.Q2_optim.zero_grad()
-        self.policy.zero_grad()
 
         # Backpropagate the loss
-        pol_loss.backward()
         q1_loss.backward()
         q2_loss.backward()
 
         # Optimizer step
-        self.pol_optim.step()
         self.Q1_optim.step()
         self.Q2_optim.step()
 
@@ -238,25 +248,36 @@ class SAC:
             # Get the first observation, or state by resetting the environment
             done, truncated = False, False
             obs, _ = self.env.reset()
+            
+            running_rew = 10
+            rewards = []
             while not (done or truncated):
                 # Sample action from the policy
-                action = self.sample_action(observation=obs)
-                
+                with torch.no_grad():
+                    action = self.sample_action(observation=obs)
+
                 # Recieve feedback from the environment using the chosen action
                 next_obs, reward, done, truncated, _ = self.env.step(action)
                 
+                # Save current ep cumulative reward.
+                rewards.append(reward)
+
                 # Save transition to replay buffer
-                self.mem.save(obs, action, next_obs, reward, done)
+                self.mem.save(obs, action, next_obs, reward, (done or truncated))
 
                 # Set next state
                 obs = next_obs
                 self.steps += 1
 
-                # Train the networks
-                if (self.steps % self.update_every == 0) and (self.steps > self.init_sample):
+                # Train networks
+                if self.steps > self.init_sample:
                     self.train()
-                    self.test_net()
-                    print(self.ep_rewards[-1])
+            
+            # Update running reward
+            running_rew = 0.10 * np.sum(rewards) + (1 - 0.10) * running_rew
+            self.running_rews.append(running_rew)
+
+            print(running_rew, np.sum(rewards))
 
             # Close the environment as the agent is done for this current episode
             self.env.close()
