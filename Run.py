@@ -99,7 +99,7 @@ def run():
         # Add the agent rewards to the reward list
         reward_dict[method] = reward_list
  
-    # Plot all methods
+    # Plot all methods in one plot.
     plot_curve(reward_dict, stdrange=10)
 
 if __name__ == "__main__":
