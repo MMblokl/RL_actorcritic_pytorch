@@ -251,8 +251,6 @@ class SAC:
             running_rew = 0.10 * np.sum(rewards) + (1 - 0.10) * running_rew
             self.running_rews.append(running_rew)
 
-            print(running_rew)
-
             # Does the running smoothed reward reach the threshold OR has the episode duration passed the limit? Stop training.
             if (running_rew >= self.env.spec.reward_threshold) or (len(self.running_rews) >= self.max_eps):
                 break
