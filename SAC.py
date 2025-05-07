@@ -61,7 +61,7 @@ import gymnasium
 
 
 class SAC:
-    def __init__(self, gamma, alpha, tau, batchsize, memsize, update_every, init_sample, reg_coef, n_neurons, n_layers, env, device):
+    def __init__(self, gamma, alpha, tau, batchsize, memsize, update_every, init_sample, reg_coef, max_eps, n_neurons, n_layers, env, device):
         # Hyperparameter initialization for the class
         self.gamma = gamma
         self.alpha = alpha
@@ -72,6 +72,7 @@ class SAC:
         self.update_every = update_every
         self.init_sample = init_sample
         self.regularization_coef = reg_coef
+        self.max_eps = max_eps
         
         # The environment and device to store tensors are are initiated as class objects
         self.env = env
@@ -106,7 +107,7 @@ class SAC:
         self.running_rews = []
 
 
-    def sample_action(self, observation):
+    def sample_action(self, observation) -> int:
         # Set the state as a tensor
         state = torch.tensor(observation, dtype=torch.float, device=self.device) #Turn env state into a tensor
         # Get the action for the current state according to the policy.
@@ -118,7 +119,7 @@ class SAC:
         return action
 
 
-    def update_target(self):
+    def update_target(self) -> None:
         # Soft update the target networks
         q1_state = self.Q1.state_dict().copy()
         q2_state = self.Q2.state_dict().copy()
@@ -133,7 +134,7 @@ class SAC:
         self.T2.load_state_dict(t2_state)
 
 
-    def train(self):
+    def train(self) -> None:
         # Sample batch from replaymemory
         batch = self.mem.sample(self.batchsize)
         batch = transition(*zip(*batch))
@@ -208,12 +209,12 @@ class SAC:
     def train_loop(self):
         # A loop for training the agent given a number of steps and a rate of testing the weights for plotting
         self.steps = 0
+        running_rew = 10
         while True:
             # Get the first observation, or state by resetting the environment
             done, truncated = False, False
             obs, _ = self.env.reset()
             
-            running_rew = 10
             rewards = []
             while not (done or truncated):
                 # Sample action from the policy
@@ -237,11 +238,16 @@ class SAC:
                 if self.steps > self.init_sample:
                     self.train()
             
+            # Close the environment as the agent is done for this current episode
+            self.env.close()
+
             # Update running reward
             running_rew = 0.10 * np.sum(rewards) + (1 - 0.10) * running_rew
             self.running_rews.append(running_rew)
 
-            print(running_rew)
-
-            # Close the environment as the agent is done for this current episode
-            self.env.close()
+            print(running_rew, np.sum(rewards))
+            # Does the running smoothed reward reach the threshold? stop the training.
+            # 10000 episode limit in case the network is REALLY unlucky to prevent an infinite loop.
+            if (running_rew >= self.env.spec.reward_threshold) or (len(self.running_rews) >= self.max_eps):
+                break
+        print(f"Training done! Reached a running reward value of {running_rew}, in {len(self.running_rews)} episodes")
