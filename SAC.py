@@ -151,7 +151,7 @@ class SAC:
         # Do not calculate gradients for target value calculation to avoid gradients flowing incorrectly.
         with torch.no_grad():
             # Sample NEW actions using the next states for the target values
-            next_action_probs, next_log_probs = self.policy(states)
+            next_action_probs, next_log_probs = self.policy(next_states)
 
             # Compute target values
             t1_vals = self.T1(next_states)

@@ -43,7 +43,7 @@ def plot_curve(method_dict, stdrange: int, ):
                             mean_rewards + stdrange,
                             alpha=0.2)
 
-        plt.xlabel("Gradient steps")
+        plt.xlabel("Episodes")
         plt.ylabel("Running reward")
         plt.title("Learning Curve")
         plt.legend()
@@ -61,13 +61,13 @@ def run():
     alpha = 0.0005 # Learning rate for all networks
     tau = 0.995 # Update rate for the target networks
     batchsize = 128 # How many transitions are sampled from the buffer for calculating loss
-    update_every = 4 # How many Q-net/Critic-net updates per policy update
+    update_every = 2 # How many Q-net/Critic-net updates per policy update
     init_sample = 1000 # Initial sample of env steps before the real train loop starts.
     memsize = 1000000 # Max size of replay buffer
     n_neurons = 256 # Number of neurons in the critic and policy network in all hidden layers.
     n_layers = 2  # Number of hidden layers in the hidden layer block of the policy and critic network.
     reg_coef = 0.3 # Entropy regularization coefficient
-    max_eps = 5000
+    max_eps = 1000
 
     # Run 5 repetitions
     for method in methods:

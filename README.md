@@ -1,4 +1,4 @@
-# Assignment 2: REINFORCE and basic Actor-Critic Methods
+# Assignment 3: Advanced Actor Critic - PPO and/or SAC
 
 Four python scripts are delivered for the assignment, which consist of the following:
 1. Nnmodule.py
@@ -7,7 +7,7 @@ Four python scripts are delivered for the assignment, which consist of the follo
 
 These scripts were created and run with the packages as detailed in Requirements.
 
-### REINFORCE.py
+### SAC.py
 This file contains the entire SAC algorithm.
 
 ### Nnmodule.py
