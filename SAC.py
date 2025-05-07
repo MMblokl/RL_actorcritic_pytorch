@@ -114,7 +114,7 @@ class SAC:
         probabilities, _ = self.policy(state)
 
         # Action is sampled from the probabilaties
-        action = np.random.choice(self.n_act, p=probabilities.numpy())
+        action = np.random.choice(self.n_act, p=probabilities.cpu().numpy())
 
         return action
 
