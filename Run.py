@@ -41,7 +41,7 @@ def plot_curve(method_dict):
             plt.fill_between(steps,
                             mean_rewards - std_rewards,
                             mean_rewards + std_rewards,
-                            alpha=0.2)
+                            alpha=0.1)
 
         plt.xlabel("Policy evaluation every 1000 steps")
         plt.ylabel("Summed average reward")
@@ -49,11 +49,11 @@ def plot_curve(method_dict):
         plt.legend()
         plt.grid(True)
         plt.tight_layout()
-        plt.savefig("learning_curve.png")
+        plt.savefig("learning_curve.png", dpi=300)
 
 def run():
     # Initialize the methods used and the reward dict that will contain the rewards for all methods over 5 repetitions
-    hps = [0.1, 0.3, 0.5, 1.0]
+    hps = [0.3, 0.5, 1.0]
     reward_dict = {}
 
     # Hyperparameters
