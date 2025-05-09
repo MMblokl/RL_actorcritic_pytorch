@@ -66,7 +66,7 @@ def run():
     memsize = 1000000 # Max size of replay buffer
     n_neurons = 256 # Number of neurons in the critic and policy network in all hidden layers.
     n_layers = 2  # Number of hidden layers in the hidden layer block of the policy and critic network.
-    max_steps = 100000 # Number of steps to run the alg each iteration.
+    max_steps = 500000 # Number of steps to run the alg each iteration.
     plotrate = 1000
 
     # Run 5 repetitions
@@ -93,7 +93,7 @@ def run():
                 device=device
                 )
             agent.train_loop()
-            print("Finished iteration")
+            print(f"Finished iteration {run} for regularization coefficient {coef}")
 
             # Add the rewards for the current repetitions to the reward list
             reward_list.append(agent.reward_log)

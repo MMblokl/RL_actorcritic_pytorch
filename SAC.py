@@ -239,7 +239,6 @@ class SAC:
         # A loop for training the agent given a number of steps and a rate of testing the weights for plotting
         # Init steps and running reward.
         self.steps = 0
-        running_rew = 10
         while self.steps < self.max_steps:
             # Get the first observation, or state by resetting the environment
             done, truncated = False, False
