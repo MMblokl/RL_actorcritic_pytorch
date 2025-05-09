@@ -61,7 +61,7 @@ import gymnasium
 
 
 class SAC:
-    def __init__(self, gamma, alpha, tau, batchsize, memsize, update_every, init_sample, reg_coef, max_eps, n_neurons, n_layers, env, device):
+    def __init__(self, gamma, alpha, tau, batchsize, memsize, update_every, init_sample, reg_coef, max_steps, plotrate, n_neurons, n_layers, env, device):
         # Hyperparameter initialization for the algorithm class
         self.gamma = gamma
         self.alpha = alpha
@@ -72,7 +72,8 @@ class SAC:
         self.update_every = update_every
         self.init_sample = init_sample
         self.regularization_coef = reg_coef
-        self.max_eps = max_eps
+        self.max_steps = max_steps
+        self.pt = plotrate
         
         # The environment and device to store tensors are initiated as class objects for easy access.
         self.env = env
@@ -105,6 +106,7 @@ class SAC:
 
         # Running_reward values for measuring the convergence to the optimum using a threshold to stop training
         self.running_rews = []
+        self.reward_log = []
 
 
     def sample_action(self, observation) -> int:
@@ -133,6 +135,32 @@ class SAC:
         for key in q2_state:
             t2_state[key] = t2_state[key]*self.tau + q2_state[key]*(1-self.tau)
         self.T2.load_state_dict(t2_state)
+
+
+    def test_net(self):
+        # Deterministic policy test every n steps, test a couple times to account for randomness.
+        with torch.no_grad():
+            rewlist = []
+            for i in range(5):
+                localenv = gymnasium.make("CartPole-v1")
+                rewards = []
+                done, truncated = False, False
+                obs, _ = localenv.reset()
+                while not (done or truncated):
+                    state = torch.tensor(obs, device=self.device)
+                    probs, _ = self.policy(state)
+                    action = np.argmax(probs.cpu().numpy()) # Use a deterministic policy for testing
+                    next_obs, reward, done, truncated, _ = localenv.step(action)
+                    obs = next_obs
+                    # Take the current reward to save
+                    rewards.append(reward)
+                # Update the average summed reward plot
+                rewlist.append(np.sum(rewards))
+                localenv.close()
+            # Take the mean reward over the 5 deterministic runs of the test episode.
+            self.reward_log.append(np.mean(rewlist))
+
+            print(self.reward_log[-1], self.steps)
 
 
     def train(self) -> None:
@@ -215,13 +243,11 @@ class SAC:
         # Init steps and running reward.
         self.steps = 0
         running_rew = 10
-        while True:
+        while self.steps < self.max_steps:
             # Get the first observation, or state by resetting the environment
             done, truncated = False, False
             obs, _ = self.env.reset()
             
-            # Clear the reward log for the previous episode
-            rewards = []
             while not (done or truncated):
                 # Sample action from the policy
                 with torch.no_grad():
@@ -229,9 +255,6 @@ class SAC:
                 
                 # Recieve feedback from the environment using the chosen action
                 next_obs, reward, done, truncated, _ = self.env.step(action)
-                
-                # Save current ep cumulative reward.
-                rewards.append(reward)
 
                 # Save transition to replay buffer
                 self.mem.save(obs, action, next_obs, reward, (done or truncated))
@@ -243,16 +266,10 @@ class SAC:
                 # Train networks if the initial sampling is finished.
                 if self.steps > self.init_sample:
                     self.train()
+                
+                # Is it time to generate a test data point?
+                if self.steps % self.pt == 0:
+                    self.test_net()
             
             # Close the environment as the agent is done for this current episode
             self.env.close()
-
-            # Update running reward value and save it to the log
-            running_rew = 0.10 * np.sum(rewards) + (1 - 0.10) * running_rew
-            self.running_rews.append(running_rew)
-
-            # Does the running smoothed reward reach the threshold OR has the episode duration passed the limit? Stop training.
-            if (running_rew >= self.env.spec.reward_threshold) or (len(self.running_rews) >= self.max_eps):
-                break
-        print(f"Training done! Reached a running reward value of {running_rew}, in {len(self.running_rews)} episodes")
-        

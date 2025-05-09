@@ -27,7 +27,7 @@ class Policy(nn.Module):
         x = self.input(x) # Input layer
         x = self.hidden(x)
         x = self.output(x) # Ouput layer
-        return F.softmax(x), F.log_softmax(x) # Softmax output to make the probabilities to 1, and log probs directly from the logits.
+        return F.softmax(x, dim=-1), F.log_softmax(x, dim=-1) # Softmax output to make the probabilities to 1, and log probs directly from the logits.
 
 
 class Critic(nn.Module):

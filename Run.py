@@ -53,7 +53,7 @@ def plot_curve(method_dict, stdrange: int, ):
 
 def run():
     # Initialize the methods used and the reward dict that will contain the rewards for all methods over 5 repetitions
-    methods = ["SAC"]
+    hps = [0.1, 0.3, 0.5, 1.0]
     reward_dict = {}
 
     # Hyperparameters
@@ -66,11 +66,11 @@ def run():
     memsize = 1000000 # Max size of replay buffer
     n_neurons = 256 # Number of neurons in the critic and policy network in all hidden layers.
     n_layers = 2  # Number of hidden layers in the hidden layer block of the policy and critic network.
-    reg_coef = 0.3 # Entropy regularization coefficient
-    max_eps = 1000
+    max_steps = 1000000 # Number of steps to run the alg each iteration.
+    plotrate = 5e3
 
     # Run 5 repetitions
-    for method in methods:
+    for coef in hps:
 
         # Initalize the rewards list
         reward_list = []
@@ -84,8 +84,9 @@ def run():
                 update_every = update_every,
                 init_sample=init_sample,
                 memsize=memsize,
-                reg_coef = reg_coef,
-                max_eps = max_eps,
+                reg_coef = coef,
+                max_steps = max_steps,
+                plotrate = plotrate,
                 n_neurons=n_neurons,
                 n_layers=n_layers,
                 env=gymnasium.make("CartPole-v1"),
@@ -94,10 +95,10 @@ def run():
             agent.train_loop()
 
             # Add the rewards for the current repetitions to the reward list
-            reward_list.append(agent.running_rews)
+            reward_list.append(agent.reward_log)
 
         # Add the agent rewards to the reward list
-        reward_dict[method] = reward_list
+        reward_dict[coef] = reward_list
  
     # Plot all methods in one plot.
     plot_curve(reward_dict, stdrange=10)
