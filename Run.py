@@ -10,7 +10,7 @@ from SAC import SAC
 global device
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def plot_curve(method_dict, stdrange: int, ):
+def plot_curve(method_dict):
         """
         Function for plotting the summed reward. May have issues
         if the total number of rewards is lower than 100.
@@ -39,12 +39,12 @@ def plot_curve(method_dict, stdrange: int, ):
             # Plot the environment and create a std range of each method mean reward
             plt.plot(steps, mean_rewards, label=method)
             plt.fill_between(steps,
-                            mean_rewards - stdrange,
-                            mean_rewards + stdrange,
+                            mean_rewards - std_rewards,
+                            mean_rewards + std_rewards,
                             alpha=0.2)
 
-        plt.xlabel("Episodes")
-        plt.ylabel("Running reward")
+        plt.xlabel("Policy evaluation every 1000 steps")
+        plt.ylabel("Summed average reward")
         plt.title("Learning Curve")
         plt.legend()
         plt.grid(True)
@@ -66,8 +66,8 @@ def run():
     memsize = 1000000 # Max size of replay buffer
     n_neurons = 256 # Number of neurons in the critic and policy network in all hidden layers.
     n_layers = 2  # Number of hidden layers in the hidden layer block of the policy and critic network.
-    max_steps = 1000000 # Number of steps to run the alg each iteration.
-    plotrate = 5e3
+    max_steps = 100000 # Number of steps to run the alg each iteration.
+    plotrate = 1000
 
     # Run 5 repetitions
     for coef in hps:
@@ -101,7 +101,7 @@ def run():
         reward_dict[coef] = reward_list
  
     # Plot all methods in one plot.
-    plot_curve(reward_dict, stdrange=10)
+    plot_curve(reward_dict)
 
 if __name__ == "__main__":
     run()
