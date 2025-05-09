@@ -141,26 +141,23 @@ class SAC:
         # Deterministic policy test every n steps, test a couple times to account for randomness.
         with torch.no_grad():
             rewlist = []
-            for i in range(5):
-                localenv = gymnasium.make("CartPole-v1")
-                rewards = []
-                done, truncated = False, False
-                obs, _ = localenv.reset()
-                while not (done or truncated):
-                    state = torch.tensor(obs, device=self.device)
-                    probs, _ = self.policy(state)
-                    action = np.argmax(probs.cpu().numpy()) # Use a deterministic policy for testing
-                    next_obs, reward, done, truncated, _ = localenv.step(action)
-                    obs = next_obs
-                    # Take the current reward to save
-                    rewards.append(reward)
-                # Update the average summed reward plot
-                rewlist.append(np.sum(rewards))
-                localenv.close()
-            # Take the mean reward over the 5 deterministic runs of the test episode.
-            self.reward_log.append(np.mean(rewlist))
-
-            print(self.reward_log[-1], self.steps)
+            localenv = gymnasium.make("CartPole-v1")
+            rewards = []
+            done, truncated = False, False
+            obs, _ = localenv.reset()
+            while not (done or truncated):
+                state = torch.tensor(obs, device=self.device)
+                probs, _ = self.policy(state)
+                action = np.argmax(probs.cpu().numpy()) # Use a deterministic policy for testing
+                next_obs, reward, done, truncated, _ = localenv.step(action)
+                obs = next_obs
+                # Take the current reward to save
+                rewards.append(reward)
+            # Update the average summed reward plot
+            rewlist.append(np.sum(rewards))
+            localenv.close()
+        # Take the mean reward over the 5 deterministic runs of the test episode.
+        self.reward_log.append(np.mean(rewlist))
 
 
     def train(self) -> None:

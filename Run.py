@@ -93,6 +93,7 @@ def run():
                 device=device
                 )
             agent.train_loop()
+            print("Finished iteration")
 
             # Add the rewards for the current repetitions to the reward list
             reward_list.append(agent.reward_log)
