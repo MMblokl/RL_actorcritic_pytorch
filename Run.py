@@ -52,7 +52,7 @@ def plot_curve(method_dict):
         plt.savefig("learning_curve.png", dpi=300)
 
 def run():
-    # Initialize the methods used and the reward dict that will contain the rewards for all methods over 5 repetitions
+    # Initialize the list of regularization coefficients to run the algorithm on.
     hps = [0.3, 0.5, 1.0]
     reward_dict = {}
 
@@ -66,7 +66,7 @@ def run():
     memsize = 1000000 # Max size of replay buffer
     n_neurons = 256 # Number of neurons in the critic and policy network in all hidden layers.
     n_layers = 2  # Number of hidden layers in the hidden layer block of the policy and critic network.
-    max_steps = 500000 # Number of steps to run the alg each iteration.
+    max_steps = 1000000 # Number of steps to run the alg each iteration.
     plotrate = 1000
 
     # Run 5 repetitions

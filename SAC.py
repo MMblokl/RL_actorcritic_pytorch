@@ -7,59 +7,6 @@ from Memory import Memory, transition
 import gymnasium
 
 
-# VERY good source:
-# https://spinningup.openai.com/en/latest/algorithms/sac.html#id12
-# Currently a completely seperate A2C algorithm.
-# Basically:
-# The entropy of the variable that comes out of the policy is taken into account while training.
-# Entropy can be evaluated for a specific variable, using the function or distribution it was derived from.
-# This way, entropy H of variable x is computed from the distribution P.
-# H(P) = Ex~P[-log(P(x))]
-
-# The agent gets a bonus to the reward equal to:
-# reward + sigma * H(pi(state))
-# Here, sigma is the trade-off coeffcient, where an infinite-step n-step is used.
-# Reward is the R-value for a state, while H is the entropy of the action chosen from the policy given that state.
-
-# Therefore, the way the critic/value-function is trained also changes in accordance to this.
-# The entropy bonus from each timestep for V(s) is thus added using sigma.
-
-# The Q-value derived from the n-step critic-value and reward value is then also changed to take a discounted entopy into account.
-# The bellman equation for Q is thus changed.
-
-# With that, training value function V is done using the Q-values + sigma * H(Pi(.|s))
-
-# Now, SAC works a bit differently again. TWO Q-funtions, or just 2 Q-values from different critic nets are learnt.
-# This comed from TD3 where SAC is based off of.
-# Honestly not too sure how that would work:
-
-
-# BASE:
-# Twin delayed DDPG, learns TWO Q-functions.:
-# https://spinningup.openai.com/en/latest/algorithms/td3.html
-# Two Q-functions are learnt. So actually this does not actually use critic functions.
-# The policy is learned by simply doing a MAX on the Q_1.
-
-# THe Q-functions are learned using "clipped double-Q learning", were both Q-functions use 1 target value, calculated using 
-# which Q-function gives a smaller target value.
-# y(r, s', d) = r + gamma*(1-d)*minQ_i(s', a'(s'))
-# Both Q-functions are learned by doing regression towards this target: MSE loss
-# Loss(Q_1) = E[(Q_1(s,a) - y(r, s', d))^2]
-# Loss(Q_2) = E[(Q_2(s,a) - y(r, s', d))^2]
-
-# y is our target value, derived from 1 of the Q-functions with the weaker Q-value, in order to not give bias to one Q-function.
-
-# The policy is learned using:
-# max Expected_r[Q_1(s,pi(s))]
-# End at convergence.
-
-# Then, the DELAY comes in that the Q-functions update normally while the policy
-# Updates with a delay. The paper recommends 2 Q-net updates each pol-net update.
-
-
-
-
-
 class SAC:
     def __init__(self, gamma, alpha, tau, batchsize, memsize, update_every, init_sample, reg_coef, max_steps, plotrate, n_neurons, n_layers, env, device):
         # Hyperparameter initialization for the algorithm class
@@ -75,7 +22,7 @@ class SAC:
         self.max_steps = max_steps
         self.pt = plotrate
         
-        # The environment and device to store tensors are initiated as class objects for easy access.
+        # The environment and pytorch device are stored as local class variables.
         self.env = env
         self.device = device
 
@@ -137,15 +84,15 @@ class SAC:
         self.T2.load_state_dict(t2_state)
 
 
-    def test_net(self):
-        # Deterministic policy test every n steps, test a couple times to account for randomness.
-        with torch.no_grad():
-            rewlist = []
-            localenv = gymnasium.make("CartPole-v1")
+    def test_net(self) -> None:
+        # Deterministic policy test for the policy. This function is called every n steps according to self.pt: plot_rate
+        with torch.no_grad(): # No gradients are needed, so we use torch.no_grad()
+            localenv = gymnasium.make("CartPole-v1") # Local environment that does not intersect with the one used for training.
             rewards = []
             done, truncated = False, False
             obs, _ = localenv.reset()
             while not (done or truncated):
+                # Take the state as a tensor for policy usage
                 state = torch.tensor(obs, device=self.device)
                 probs, _ = self.policy(state)
                 action = np.argmax(probs.cpu().numpy()) # Use a deterministic policy for testing
@@ -153,11 +100,10 @@ class SAC:
                 obs = next_obs
                 # Take the current reward to save
                 rewards.append(reward)
-            # Update the average summed reward plot
-            rewlist.append(np.sum(rewards))
+            # Close the local environment
             localenv.close()
-        # Take the mean reward over the 5 deterministic runs of the test episode.
-        self.reward_log.append(np.mean(rewlist))
+        # Take the summed reward and save it to the reward log
+        self.reward_log.append(np.mean(rewards))
 
 
     def train(self) -> None:
@@ -166,7 +112,7 @@ class SAC:
         # Seperate the (s, a, s', r, d) values from the batch
         batch = transition(*zip(*batch))
         
-        # Set each batch value to tensors for gpu calculations
+        # Take each group of variables from the batch and store them in tensors
         states = torch.tensor(np.array(batch.state), device=self.device) # Stack all states into an ndarray and transfer it to a tensor
         next_states = torch.tensor(np.array(batch.next_state), device=self.device)
         actions = torch.tensor(batch.action, device=self.device)
@@ -183,12 +129,13 @@ class SAC:
             t2_vals = self.T2(next_states)
             min_t_vals = torch.min(t1_vals, t2_vals)
             
-            # Next V-value
+            # Target value computation
             # H is estimated using the log_probs value
+            # We use the full expectation, so from both actions, multiplied by the action probabilities.
+            # This way, the algorithm learns from both actions.
+            # Summed over both actions with the min_t_vals and the entropy.
             next_v = (next_action_probs * (min_t_vals - (self.alpha * next_log_probs))).sum(dim=1)
-
-            # Target value
-            y = rewards + (1-dones) * self.gamma * next_v
+            y = rewards + (1-dones) * self.gamma * next_v # Target value y
 
         # Get Q-vals for both Q nets
         q1_vals = self.Q1(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
@@ -222,6 +169,9 @@ class SAC:
                 min_q_vals = torch.min(q1, q2)
 
             # Calculate the policy loss
+            # We use the full expectation, so from both actions, multiplied by the action probabilities.
+            # This way, the algorithm learns from both actions.
+            # Summed over both actions with the min_t_vals and the entropy.
             pol_loss = (act_probs * (self.alpha * log_probs - min_q_vals)).sum(dim=1).mean()
         
             # Clear old gradient
