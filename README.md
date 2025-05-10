@@ -8,7 +8,7 @@ Four python scripts are delivered for the assignment, which consist of the follo
 These scripts were created and run with the packages as detailed in Requirements.
 
 ### SAC.py
-This file contains the entire SAC algorithm.
+This file contains the entire SAC algorithm agent.
 
 ### Nnmodule.py
 Python file containing the Critic and Policy network used in the SAC algorithm.
@@ -35,5 +35,7 @@ The entire pip environment can be downloaded using the requirements.txt file
 >pip install -r  requirements.txt
 
 ## Note:
+Takes quite a while to run on 1.000.000 gradient steps, make sure to have a CUDA machine to get a speed up as just using the CPU will be very slow.
+
 There might be issues with the requirements.txt file as the pip freeze commands tends to link back to local package cache files at times.
 If this occurs, just install Gymnasium, Pytorch, Matplotlib and numpy seperately, as long as the CUDA version of pytorch is used, this should just work.

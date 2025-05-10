@@ -19,10 +19,10 @@ def plot_curve(method_dict):
         method: string, string to give the plot a proper title
         finished: boolean, bool to signify whether to save the plot y/n
         """
-
         plt.figure(figsize=(10, 6))
 
         for method, rewards_list in method_dict.items():
+            
             # Determine the length of the the largest number of rewards for the reppetions
             max_len = max(len(reward_rep) for reward_rep in rewards_list)
 
@@ -98,6 +98,10 @@ def run():
             # Add the rewards for the current repetitions to the reward list
             reward_list.append(agent.reward_log)
 
+        # Save the reward log as an np file in case the plot did not work properly and so that the entire run doesnt have to be repeated.
+        reward_arr = np.asarray(reward_list)
+        np.save(f"{coef}_rew.npy", reward_arr)
+        
         # Add the agent rewards to the reward list
         reward_dict[coef] = reward_list
  
@@ -105,4 +109,6 @@ def run():
     plot_curve(reward_dict)
 
 if __name__ == "__main__":
+    rew_dict = {0.1:[[np.float64(9.0), np.float64(500.0), np.float64(191.0), np.float64(176.0), np.float64(263.0), np.float64(172.0), np.float64(180.0), np.float64(173.0), np.float64(133.0), np.float64(170.0), np.float64(149.0), np.float64(166.0), np.float64(185.0), np.float64(176.0), np.float64(231.0), np.float64(238.0), np.float64(304.0), np.float64(361.0), np.float64(309.0), np.float64(235.0), np.float64(350.0), np.float64(270.0), np.float64(500.0), np.float64(229.0), np.float64(206.0), np.float64(223.0), np.float64(288.0), np.float64(211.0), np.float64(211.0), np.float64(237.0), np.float64(186.0), np.float64(234.0), np.float64(268.0), np.float64(500.0), np.float64(396.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(414.0)], [np.float64(9.0), np.float64(500.0), np.float64(191.0), np.float64(176.0), np.float64(263.0), np.float64(172.0), np.float64(180.0), np.float64(173.0), np.float64(133.0), np.float64(170.0), np.float64(149.0), np.float64(166.0), np.float64(185.0), np.float64(176.0), np.float64(231.0), np.float64(238.0), np.float64(304.0), np.float64(361.0), np.float64(309.0), np.float64(235.0), np.float64(350.0), np.float64(270.0), np.float64(500.0), np.float64(229.0), np.float64(206.0), np.float64(223.0), np.float64(288.0), np.float64(211.0), np.float64(211.0), np.float64(237.0), np.float64(186.0), np.float64(234.0), np.float64(268.0), np.float64(500.0), np.float64(396.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(414.0)], [np.float64(9.0), np.float64(500.0), np.float64(191.0), np.float64(176.0), np.float64(263.0), np.float64(172.0), np.float64(180.0), np.float64(173.0), np.float64(133.0), np.float64(170.0), np.float64(149.0), np.float64(166.0), np.float64(185.0), np.float64(176.0), np.float64(231.0), np.float64(238.0), np.float64(304.0), np.float64(361.0), np.float64(309.0), np.float64(235.0), np.float64(350.0), np.float64(270.0), np.float64(500.0), np.float64(229.0), np.float64(206.0), np.float64(223.0), np.float64(288.0), np.float64(211.0), np.float64(211.0), np.float64(237.0), np.float64(186.0), np.float64(234.0), np.float64(268.0), np.float64(500.0), np.float64(396.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(500.0), np.float64(414.0)]]}
+    plot_curve(rew_dict)
     run()

@@ -3,7 +3,7 @@ import torch.nn.functional as F
 
 
 class Policy(nn.Module):
-    # Polci network
+    # Policy network
     def __init__(self, n_obs: int, n_act: int, n_neurons: int, n_layers: int, device):
         super(Policy, self).__init__()
         # Input layer
