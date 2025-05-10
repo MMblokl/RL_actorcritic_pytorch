@@ -103,7 +103,7 @@ class SAC:
             # Close the local environment
             localenv.close()
         # Take the summed reward and save it to the reward log
-        self.reward_log.append(np.mean(rewards))
+        self.reward_log.append(np.sum(rewards))
 
 
     def train(self) -> None:
