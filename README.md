@@ -36,6 +36,7 @@ The entire pip environment can be downloaded using the requirements.txt file
 
 ## Note:
 Takes quite a while to run on 1.000.000 gradient steps, make sure to have a CUDA machine to get a speed up as just using the CPU will be very slow.
+Running the Run.py script with basic parameters takes around 8 hours to finish using an Nvidia 3090ti.
 
 There might be issues with the requirements.txt file as the pip freeze commands tends to link back to local package cache files at times.
 If this occurs, just install Gymnasium, Pytorch, Matplotlib and numpy seperately, as long as the CUDA version of pytorch is used, this should just work.
