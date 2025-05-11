@@ -10,7 +10,7 @@ from SAC import SAC
 global device
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# Function for smoothing the line of the learning plot
+# Function for smoothing a list of data points for a less chaotic plot.
 def smooth(scalars, weight):  # Weight between 0 and 1
     last = scalars[0]  # First value in the plot (first timestep)
     smoothed = list()
@@ -39,11 +39,11 @@ def plot_curve(method_dict):
             max_len = max(len(reward_rep) for reward_rep in rewards_list)
 
             # Pad the rewards of each reppetion with nan values
-            #padded_r = np.array([reward_rep + [np.nan] * (max_len - len(reward_rep)) for reward_rep in rewards_list])
+            padded_r = np.array([reward_rep + [np.nan] * (max_len - len(reward_rep)) for reward_rep in rewards_list])
 
             # Calculate the mean and std without the nan values
-            mean_rewards = np.nanmean(rewards_list, axis=0)
-            std_rewards = np.nanstd(rewards_list, axis=0)
+            mean_rewards = np.nanmean(padded_r, axis=0)
+            std_rewards = np.nanstd(padded_r, axis=0)
 
             smoothmean = np.asarray(smooth(mean_rewards, 0.75))
             smoothstd = np.asarray(smooth(std_rewards, 0.75))
@@ -65,6 +65,7 @@ def plot_curve(method_dict):
         plt.grid(True)
         plt.tight_layout()
         plt.savefig("learning_curve.png", dpi=300)
+
 
 def run():
     # Initialize the list of regularization coefficients to run the algorithm on.

@@ -40,3 +40,5 @@ Running the Run.py script with basic parameters takes around 8 hours to finish u
 
 There might be issues with the requirements.txt file as the pip freeze commands tends to link back to local package cache files at times.
 If this occurs, just install Gymnasium, Pytorch, Matplotlib and numpy seperately, as long as the CUDA version of pytorch is used, this should just work.
+
+If an error shows up for the plot, reininstall the entire environment as PyQt5 for matplotlib can screw up installing sometimes. Test the code with 10000 steps to see if it works before doing the full run.

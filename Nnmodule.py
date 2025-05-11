@@ -56,4 +56,3 @@ class Critic(nn.Module):
         x = self.hidden(x)
         val = self.output(x) # Ouput layer
         return val
-
