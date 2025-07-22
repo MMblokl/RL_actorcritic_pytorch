@@ -2,7 +2,6 @@ from Nnmodule import Critic, Policy
 import torch
 import torch.optim as optim
 import numpy as np
-from torch.distributions import Categorical
 import gymnasium as gym
 
 
@@ -182,7 +181,6 @@ class AC:
                 # Evaluate 
                 if (self.steps % self.pt == 0) and self.evaluate:
                     self.eval()
-                    print(self.reward_log[-1])
 
                 self.steps += 1
             self.env.close()
