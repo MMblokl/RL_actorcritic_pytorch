@@ -1,3 +1,6 @@
-# SAC using pytorch
-This repository contains a Soft Actor Critic algorithm creating using pytorch and a class based structure.
-The Run.py script contains sample usage of the class, where all the parameters can be found in the SAC.py script containing the class.
+# Actor critic approaches using PyTorch.
+This repository contains 3 Actor-Critic reinforcement learning algorithms created using PyTorch using a class-based agent:
+- Actor Critic (AC)
+- Advantage Actor Critic (A2C)
+- Soft Actor Critic (SAC)
+
