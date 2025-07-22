@@ -6,9 +6,31 @@ from torch.distributions import Categorical, Normal
 from Memory import Memory, transition
 import gymnasium
 
+#TODO:
+#3. Possible improvements: Change the way naming is done, and use a lot less comments, make it just make sense
+#4. Minimize as many functions as possible.
+#5. Make plots an opt-in feature, and add saving the policy parameters and loading
+
 
 class SAC:
-    def __init__(self, gamma, alpha, tau, batchsize, memsize, update_every, init_sample, reg_coef, max_steps, plotrate, n_neurons, n_layers, env, device):
+    def __init__(self, 
+                 gamma=0.99,            # Future reward discount factor
+                 alpha=0.0005,          # Learning rate for all networks
+                 tau=0.995,             # Update rate for the target networks
+                 batchsize=128,         # How many transitions are sampled from the buffer for calculating loss
+                 memsize=1000000,       # Max size of replay buffer
+                 update_every=2,        # How many Q-net/Critic-net updates per policy update
+                 init_sample=1000,      # Initial sample of env steps before the real train loop starts.
+                 reg_coef=0.3,          # The regularization coefficient for entropy maximization
+                 max_steps=1000000,     # Number of steps to run the alg each iteration.
+                 plotrate=1000,         # Rate at which test datapoints are generated. Can be opted out if no evaluation is needed
+                 n_neurons=256,         # Number of neurons in the critic and policy network in all hidden layers.
+                 n_layers=2,            # Number of hidden layers in the hidden layer block of the policy and critic network.
+                 evaluate=False,         # Whether to generate evaluation data points for plotting learning curve.
+                 n_reps=5,              # The number of repetitions for the evaluation.
+                 envname="CartPole-v1", # The environment name
+                 device=torch.device('cuda' if torch.cuda.is_available() else 'cpu') # PyTorch device to use. CPU by default if CUDA does not work.
+                 ):
         # Hyperparameter initialization for the algorithm class
         self.gamma = gamma
         self.alpha = alpha
@@ -21,14 +43,15 @@ class SAC:
         self.regularization_coef = reg_coef
         self.max_steps = max_steps
         self.pt = plotrate
+        self.envname = envname
+        self.evaluate = evaluate
+        self.n_reps = n_reps
         
-        # The environment and pytorch device are stored as local class variables.
-        self.env = env
+        # Initial parameter collection
+        self.env = gymnasium.make(envname)
         self.device = device
-
-        # Get the number of possible actions and observations for for intializing the critic and target nets
-        self.n_act = env.action_space.n
-        state, _ = env.reset()
+        self.n_act = self.env.action_space.n
+        state, _ = self.env.reset()
         self.n_obs = len(state)
         self.env.close()
 
@@ -38,21 +61,14 @@ class SAC:
         self.Q2 = Critic(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device) # Critic 2
         self.T1 = Critic(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device) # Target 1
         self.T2 = Critic(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device) # Target 2
-
-        # Initialize the target net parameters as a copy of the critic net parameters.
         self.T1.load_state_dict(self.Q1.state_dict().copy())
         self.T2.load_state_dict(self.Q2.state_dict().copy())
-
-        # Optimizers for policy and critic networks. Target network is soft updated and thus does not need an optimizer.
         self.pol_optim = optim.Adam(self.policy.parameters(), lr=alpha, amsgrad=True)
         self.Q1_optim = optim.Adam(self.Q1.parameters(), lr=alpha, amsgrad=True)
         self.Q2_optim = optim.Adam(self.Q2.parameters(), lr=alpha, amsgrad=True)
 
         # Replay buffer/memory
         self.mem = Memory(memsize)
-
-        # Running_reward values for measuring the convergence to the optimum using a threshold to stop training
-        self.running_rews = []
         self.reward_log = []
 
 
@@ -84,138 +100,116 @@ class SAC:
         self.T2.load_state_dict(t2_state)
 
 
-    def test_net(self) -> None:
-        # Deterministic policy test for the policy. This function is called every n steps according to self.pt: plot_rate
-        with torch.no_grad(): # No gradients are needed, so we use torch.no_grad()
-            localenv = gymnasium.make("CartPole-v1") # Local environment that does not intersect with the one used for training.
-            rewards = []
-            done, truncated = False, False
-            obs, _ = localenv.reset()
-            while not (done or truncated):
-                # Take the state as a tensor for policy usage
-                state = torch.tensor(obs, device=self.device)
-                probs, _ = self.policy(state)
-                action = np.argmax(probs.cpu().numpy()) # Use a deterministic policy for testing
-                next_obs, reward, done, truncated, _ = localenv.step(action)
-                obs = next_obs
-                # Take the current reward to save
-                rewards.append(reward)
-            # Close the local environment
-            localenv.close()
-        # Take the summed reward and save it to the reward log
-        self.reward_log.append(np.sum(rewards))
+    def eval(self) -> None:
+        with torch.no_grad(): # No gradient
+            envs = gymnasium.make_vec(self.envname, render_mode=None, num_envs=self.n_reps, vectorization_mode="async")
+            saved_rews = []
+            dones, truncateds = np.zeros(self.n_reps, dtype=bool), np.zeros(self.n_reps, dtype=bool)
+            observations, _ = envs.reset()
+            ep_end = np.zeros(self.n_reps) # Store the number of steps before termination
+            steps = 0
+            while np.any(ep_end == 0.): # Until all envs finish
+                states = torch.tensor(observations, device=self.device)
+                probs, _ = self.policy(states)
+                actions = np.argmax(probs.cpu().numpy(), axis=1)
+                next_obs, rewards, dones, truncateds, _ = envs.step(actions)
+                observations = next_obs
+                saved_rews.append(rewards)
+                terminations = np.logical_or(dones, truncateds)
+                steps += 1
+                
+                # Check whether to update ep_end
+                if np.any(terminations):
+                    loc = np.where(terminations)
+                    check = ep_end[loc] == 0.
+                    ep_end[loc] = steps * check
+            saved_rews = np.array(saved_rews)
+
+            #Sum the rewards using a mask method
+            row_indices = np.arange(saved_rews.shape[0]).reshape(-1, 1)
+            col_limits = ep_end.reshape(1, -1)
+            mask = row_indices < col_limits
+            rewards = np.sum(saved_rews * mask, axis=0)
+            self.reward_log.append(rewards)
 
 
-    def train(self) -> None:
-        # Sample batch of transitions from the replay buffer.
+    def train_batch(self) -> None:
+        # Train the networks on a batch
         batch = self.mem.sample(self.batchsize)
-        # Seperate the (s, a, s', r, d) values from the batch
         batch = transition(*zip(*batch))
-        
-        # Take each group of variables from the batch and store them in tensors
-        states = torch.tensor(np.array(batch.state), device=self.device) # Stack all states into an ndarray and transfer it to a tensor
+        states = torch.tensor(np.array(batch.state), device=self.device)
         next_states = torch.tensor(np.array(batch.next_state), device=self.device)
         actions = torch.tensor(batch.action, device=self.device)
         rewards = torch.tensor(batch.reward, device=self.device)
         dones = torch.tensor(batch.done, dtype=torch.float, device=self.device)
         
-        # Do not calculate gradients for target value calculation to avoid gradients flowing incorrectly.
         with torch.no_grad():
             # Sample NEW actions using the next states for the target values
             next_action_probs, next_log_probs = self.policy(next_states)
-
-            # Compute target values
             t1_vals = self.T1(next_states)
             t2_vals = self.T2(next_states)
             min_t_vals = torch.min(t1_vals, t2_vals)
-            
-            # Target value computation
-            # H is estimated using the log_probs value
-            # We use the full expectation, so from both actions, multiplied by the action probabilities.
-            # This way, the algorithm learns from both actions.
-            # Summed over both actions with the min_t_vals and the entropy.
             next_v = (next_action_probs * (min_t_vals - (self.alpha * next_log_probs))).sum(dim=1)
             y = rewards + (1-dones) * self.gamma * next_v # Target value y
 
-        # Get Q-vals for both Q nets
+        # Q_values and loss 
         q1_vals = self.Q1(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
         q2_vals = self.Q2(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
-
-        # Loss for the critic networks is MSE between the Q-values and the target value y.
         q1_loss = torch.nn.functional.mse_loss(q1_vals, y)
         q2_loss = torch.nn.functional.mse_loss(q2_vals, y)
-
-        # Critic nets are updates BEFORE the policy loss is computed.
-        # Reset old grads
         self.Q1_optim.zero_grad()
         self.Q2_optim.zero_grad()
-
-        # Backpropagate the loss
         q1_loss.backward()
         q2_loss.backward()
-
-        # Optimizer step
         self.Q1_optim.step()
         self.Q2_optim.step()
 
-        # Is this train step a policy training step?
+        # Update policy if this is a policy training step
         if self.steps % self.update_every == 0:
             # Loss for the policy network
             act_probs, log_probs = self.policy(states)
-            # Calculate the min(q1, q2) values without gradient to avoid gradients flowing incorrectly.
             with torch.no_grad():
                 q1 = self.Q1(states)
                 q2 = self.Q2(states)
                 min_q_vals = torch.min(q1, q2)
 
-            # Calculate the policy loss
-            # We use the full expectation, so from both actions, multiplied by the action probabilities.
-            # This way, the algorithm learns from both actions.
-            # Summed over both actions with the min_t_vals and the entropy.
+            # Policy loss using the full expectation
             pol_loss = (act_probs * (self.alpha * log_probs - min_q_vals)).sum(dim=1).mean()
-        
-            # Clear old gradient
             self.pol_optim.zero_grad()
-            # Backprop loss
             pol_loss.backward()
-            # Update network
             self.pol_optim.step()
 
         # Update target networks using soft update
         self.update_target()
 
 
-    def train_loop(self):
-        # A loop for training the agent given a number of steps and a rate of testing the weights for plotting
-        # Init steps and running reward.
+    def train(self):
         self.steps = 0
         while self.steps < self.max_steps:
-            # Get the first observation, or state by resetting the environment
             done, truncated = False, False
             obs, _ = self.env.reset()
-            
-            while not (done or truncated):
+            while not (done or truncated): # Until training env stops
                 # Sample action from the policy
                 with torch.no_grad():
                     action = self.sample_action(observation=obs)
-                
-                # Recieve feedback from the environment using the chosen action
                 next_obs, reward, done, truncated, _ = self.env.step(action)
-
-                # Save transition to replay buffer
-                self.mem.save(obs, action, next_obs, reward, (done or truncated))
-
-                # Set next state
+                self.mem.save(obs, action, next_obs, reward, (done or truncated)) # Save to replay buffer
                 obs = next_obs
                 self.steps += 1
 
-                # Train networks if the initial sampling is finished.
+                # Start training after initial sample is completed
                 if self.steps > self.init_sample:
-                    self.train()
-                
-                # Is it time to generate a test data point?
-                if self.steps % self.pt == 0:
-                    self.test_net()
-            
-            # Close the environment as the agent is done for this current episode
+                    self.train_batch()
+
+                # Evaluate 
+                if (self.steps % self.pt == 0) and self.evaluate:
+                    self.eval()
             self.env.close()
+    
+    def save(self, filename):
+        # Save policy parameters.
+        torch.save(self.policy.state_dict, filename)
+    
+    def load(self, filename):
+        # Load policy parameters
+        self.policy.load_state_dict(torch.load(filename, weights_only=True))
