@@ -18,7 +18,7 @@ class AC:
                  max_steps = 1000000,       # Max training steps
                  plot_rate = 1000,          # Number of steps to pass before a datapoint is generated
                  n_reps = 5,                # Number of evaluation repetitions to use (number of eval envs)
-                 evaluate = True,           # Whether to use evaluation yes/no
+                 evaluate = False,           # Whether to use evaluation yes/no
                  envname = "CartPole-v1",   # Environment name
                  device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
                  ):

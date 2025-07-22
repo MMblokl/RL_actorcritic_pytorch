@@ -2,9 +2,8 @@ from Nnmodule import Policy, Critic
 import torch
 import torch.optim as optim
 import numpy as np
-from torch.distributions import Categorical, Normal
 from Memory import Memory, transition
-import gymnasium
+import gymnasium as gym
 
 #TODO:
 #3. Possible improvements: Change the way naming is done, and use a lot less comments, make it just make sense
@@ -48,7 +47,7 @@ class SAC:
         self.n_reps = n_reps
         
         # Initial parameter collection
-        self.env = gymnasium.make(envname)
+        self.env = gym.make(envname)
         self.device = device
         self.n_act = self.env.action_space.n
         state, _ = self.env.reset()
@@ -185,6 +184,11 @@ class SAC:
             done, truncated = False, False
             obs, _ = self.env.reset()
             while not (done or truncated): # Until training env stops
+                # Evaluate 
+                if (self.steps % self.pt == 0) and self.evaluate:
+                    self.eval()
+                    print(self.reward_log[-1])
+                
                 # Sample action from the policy
                 with torch.no_grad():
                     action = self.sample_action(observation=obs)
@@ -196,10 +200,7 @@ class SAC:
                 # Start training after initial sample is completed
                 if self.steps > self.init_sample:
                     self.train_batch()
-
-                # Evaluate 
-                if (self.steps % self.pt == 0) and self.evaluate:
-                    self.eval()
+                
             self.env.close()
 
 

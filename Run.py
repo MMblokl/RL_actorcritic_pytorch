@@ -23,7 +23,7 @@ def smooth(scalars, weight):  # Weight between 0 and 1
     return smoothed
 
 
-def plot_curve(method_dict):
+def plot_curve(method_dict, filename):
         """
         Function for plotting the summed reward. May have issues
         if the total number of rewards is lower than 100.
@@ -35,23 +35,15 @@ def plot_curve(method_dict):
         plt.figure(figsize=(10, 6))
 
         for method, rewards_list in method_dict.items():
-            
-            # Determine the length of the the largest number of rewards for the reppetions
-            max_len = max(len(reward_rep) for reward_rep in rewards_list)
-
-            # Pad the rewards of each reppetion with nan values
-            padded_r = np.array([reward_rep + [np.nan] * (max_len - len(reward_rep)) for reward_rep in rewards_list])
-
             # Calculate the mean and std without the nan values
-            mean_rewards = np.nanmean(padded_r, axis=0)
-            std_rewards = np.nanstd(padded_r, axis=0)
+            mean_rewards = np.mean(rewards_list, axis=1)
+            std_rewards = np.std(rewards_list, axis=1)
 
             smoothmean = np.asarray(smooth(mean_rewards, 0.75))
             smoothstd = np.asarray(smooth(std_rewards, 0.75))
 
             # Determine the number of steps taken in the environment
             steps = np.arange(len(mean_rewards))
-
             # Plot the environment and create a std range of each method mean reward
             plt.plot(steps, smoothmean, label=method)
             plt.fill_between(steps,
@@ -65,19 +57,32 @@ def plot_curve(method_dict):
         plt.legend()
         plt.grid(True)
         plt.tight_layout()
-        plt.savefig("learning_curve.png", dpi=300)
+        plt.savefig(f"{filename}", dpi=300)
 
 
-agent = A2C()
-breakpoint()
-
-
-agent = SAC(evaluate=True, max_steps=5000)
+# Plotting a learning curve
+agent = AC(evaluate=True, max_steps=10000)
 agent.train()
-# The evaluation learning reward log. Empty if evaluate=False
-agent.reward_log
+method_dict = {"AC": agent.reward_log}
+agent = A2C(evaluate=True, max_steps=10000)
+agent.train()
+method_dict["A2C"] = agent.reward_log
+agent = SAC(evaluate=True, max_steps=10000)
+agent.train()
+method_dict["SAC"] = agent.reward_log
+plot_curve(method_dict=method_dict, filename="Learning curve.png")
+
+
+# Saving policy weights.
+agent = SAC()
+agent.train()
 # Save policy weights
 agent.save("./policy.pt")
-breakpoint()
+
+agent2 = SAC()
 # Load policy weights
-agent.load("./policy.pt")
+agent2.load("./policy.pt")
+# The policy can be seperated from the agent after training.
+trained_policy = agent2.policy()
+
+#Visulatization
