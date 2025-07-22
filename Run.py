@@ -65,12 +65,12 @@ def plot_curve(method_dict):
         plt.tight_layout()
         plt.savefig("learning_curve.png", dpi=300)
 
-
-agent = SAC(evaluate=True)
+agent = SAC(evaluate=True, max_steps=5000)
 agent.train()
 # The evaluation learning reward log. Empty if evaluate=False
 agent.reward_log
 # Save policy weights
 agent.save("./policy.pt")
+breakpoint()
 # Load policy weights
 agent.load("./policy.pt")

@@ -55,17 +55,17 @@ class SAC:
         self.n_obs = len(state)
         self.env.close()
 
-        # Init the Policy network, Critic networks and Target networks. The critic are the "Q1" and "Q2" net
+        # Init the Policy network, Critic networks and Target networks.
         self.policy = Policy(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=device)
-        self.Q1 = Critic(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device) # Critic 1
-        self.Q2 = Critic(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device) # Critic 2
+        self.C1 = Critic(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device) # Critic 1
+        self.C2 = Critic(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device) # Critic 2
         self.T1 = Critic(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device) # Target 1
         self.T2 = Critic(n_obs=self.n_obs, n_act=self.n_act, n_neurons=n_neurons, n_layers=n_layers, device=self.device) # Target 2
-        self.T1.load_state_dict(self.Q1.state_dict().copy())
-        self.T2.load_state_dict(self.Q2.state_dict().copy())
+        self.T1.load_state_dict(self.C1.state_dict().copy())
+        self.T2.load_state_dict(self.C2.state_dict().copy())
         self.pol_optim = optim.Adam(self.policy.parameters(), lr=alpha, amsgrad=True)
-        self.Q1_optim = optim.Adam(self.Q1.parameters(), lr=alpha, amsgrad=True)
-        self.Q2_optim = optim.Adam(self.Q2.parameters(), lr=alpha, amsgrad=True)
+        self.C1_optim = optim.Adam(self.C1.parameters(), lr=alpha, amsgrad=True)
+        self.C2_optim = optim.Adam(self.C2.parameters(), lr=alpha, amsgrad=True)
 
         # Replay buffer/memory
         self.mem = Memory(memsize)
@@ -73,21 +73,17 @@ class SAC:
 
 
     def sample_action(self, observation) -> int:
-        # Randomly samples an action according to the action probabilities.
-        # Set the state as a tensor
+        # Random action sampling from policy
         state = torch.tensor(observation, dtype=torch.float, device=self.device)
-        # Get the actions probs from the policy net.
         probabilities, _ = self.policy(state)
-        # Action is sampled from the probabilaties with np.choice.
         action = np.random.choice(self.n_act, p=probabilities.cpu().numpy())
-
         return action
 
 
     def update_target(self) -> None:
         # Soft update the target networks
-        q1_state = self.Q1.state_dict().copy()
-        q2_state = self.Q2.state_dict().copy()
+        q1_state = self.C1.state_dict().copy()
+        q2_state = self.C2.state_dict().copy()
         t1_state = self.T1.state_dict().copy()
         t2_state = self.T2.state_dict().copy()
 
@@ -153,24 +149,24 @@ class SAC:
             y = rewards + (1-dones) * self.gamma * next_v # Target value y
 
         # Q_values and loss 
-        q1_vals = self.Q1(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
-        q2_vals = self.Q2(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
+        q1_vals = self.C1(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
+        q2_vals = self.C2(states).gather(1, actions.view(-1,1)).view(1,-1)[0]
         q1_loss = torch.nn.functional.mse_loss(q1_vals, y)
         q2_loss = torch.nn.functional.mse_loss(q2_vals, y)
-        self.Q1_optim.zero_grad()
-        self.Q2_optim.zero_grad()
+        self.C1_optim.zero_grad()
+        self.C2_optim.zero_grad()
         q1_loss.backward()
         q2_loss.backward()
-        self.Q1_optim.step()
-        self.Q2_optim.step()
+        self.C1_optim.step()
+        self.C2_optim.step()
 
         # Update policy if this is a policy training step
         if self.steps % self.update_every == 0:
             # Loss for the policy network
             act_probs, log_probs = self.policy(states)
             with torch.no_grad():
-                q1 = self.Q1(states)
-                q2 = self.Q2(states)
+                q1 = self.C1(states)
+                q2 = self.C2(states)
                 min_q_vals = torch.min(q1, q2)
 
             # Policy loss using the full expectation
@@ -204,12 +200,13 @@ class SAC:
                 # Evaluate 
                 if (self.steps % self.pt == 0) and self.evaluate:
                     self.eval()
+                
             self.env.close()
     
     def save(self, filename):
         # Save policy parameters.
-        torch.save(self.policy.state_dict, filename)
+        torch.save(self.policy.state_dict(), filename)
     
     def load(self, filename):
         # Load policy parameters
-        self.policy.load_state_dict(torch.load(filename, weights_only=True))
+        self.policy.load_state_dict(torch.load(filename))
