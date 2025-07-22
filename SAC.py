@@ -98,7 +98,7 @@ class SAC:
 
     def eval(self) -> None:
         with torch.no_grad(): # No gradient
-            envs = gymnasium.make_vec(self.envname, render_mode=None, num_envs=self.n_reps, vectorization_mode="async")
+            envs = gym.make_vec(self.envname, render_mode=None, num_envs=self.n_reps, vectorization_mode="async")
             saved_rews = []
             dones, truncateds = np.zeros(self.n_reps, dtype=bool), np.zeros(self.n_reps, dtype=bool)
             observations, _ = envs.reset()
@@ -116,17 +116,17 @@ class SAC:
                 
                 # Check whether to update ep_end
                 if np.any(terminations):
-                    loc = np.where(terminations)
-                    check = ep_end[loc] == 0.
-                    ep_end[loc] = steps * check
+                    loc = np.where(terminations)[0]
+                    check = (ep_end[loc] == 0.)
+                    ep_end[loc[check]] = steps
             saved_rews = np.array(saved_rews)
-
             #Sum the rewards using a mask method
             row_indices = np.arange(saved_rews.shape[0]).reshape(-1, 1)
             col_limits = ep_end.reshape(1, -1)
             mask = row_indices < col_limits
-            rewards = np.sum(saved_rews * mask, axis=0)
-            self.reward_log.append(rewards)
+            final_rewards = np.sum(saved_rews * mask, axis=0)
+            self.reward_log.append(final_rewards)
+            envs.close()
 
 
     def train_batch(self) -> None:
@@ -200,13 +200,14 @@ class SAC:
                 # Evaluate 
                 if (self.steps % self.pt == 0) and self.evaluate:
                     self.eval()
-                
             self.env.close()
-    
+
+
     def save(self, filename):
         # Save policy parameters.
         torch.save(self.policy.state_dict(), filename)
-    
+
+
     def load(self, filename):
         # Load policy parameters
         self.policy.load_state_dict(torch.load(filename))

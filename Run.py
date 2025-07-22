@@ -3,6 +3,7 @@ import gymnasium
 import torch
 import matplotlib.pyplot as plt
 from SAC import SAC
+from AC import AC
 
 # The device to use for pytorch:
 # If cuda is not available it will be mega super slow 0_0 but will still work using the CPU.
@@ -64,6 +65,10 @@ def plot_curve(method_dict):
         plt.grid(True)
         plt.tight_layout()
         plt.savefig("learning_curve.png", dpi=300)
+
+agent = AC()
+agent.train()
+breakpoint()
 
 agent = SAC(evaluate=True, max_steps=5000)
 agent.train()
